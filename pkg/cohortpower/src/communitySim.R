@@ -30,7 +30,7 @@ CommonCancer=	c(colnames(cancerRatesByType[[1]]) [ !colnames(cancerRatesByType[[
 
 	carray=varray=parray
 	retries=array(NA, c(length(parameters$Followup), length(CommonCancer),SimulationTime,3))
-	dimnames(retries) = list(as.character(parameters$Followup),  CommonCancer, NULL,c("95pct", "cc2","cc1"))
+	dimnames(retries) = list(as.character(parameters$Followup),  CommonCancer, NULL,c("95pct", "cc4","cc1"))
 
 	# loop through simulations, get all the p values
 	for (i in 1:SimulationTime){
@@ -60,6 +60,7 @@ CommonCancer=	c(colnames(cancerRatesByType[[1]]) [ !colnames(cancerRatesByType[[
 	
 	attributes(power)$var =varray
 	attributes(power)$coef =carray
+	attributes(power)$retries = retries
 	attributes(power)$data = allData
 	
 	return(power)
@@ -95,7 +96,7 @@ dimnames = list(as.character(parameters$Followup),
 retries = 
 		array(NA, c(length(parameters$Followup),  length(CommonCancer), 3),
 				dimnames = list(as.character(parameters$Followup), 
-						 CommonCancer, c("95pct", "cc2","cc1")) )   
+						 CommonCancer, c("95pct", "cc8","cc1")) )   
 
 # simulate a cohort
 
@@ -179,24 +180,26 @@ for(Dcancer in CommonCancer) {
 		coxfitAfterYears = list(coxfitAfterYears, coef=NA) 
 			Ntries = Ntries + 1
 		}
-		Ntries2
+		Ntries8 = 0
 		# if still singular matrix, keep twice the number of cases as controls
-		while(any(is.na(coxfitAfterYears$coef)) & Ntries <= 10) {
-			
-			NtoKeep = round(length(theEvent)*2)
-			cat("s2")
+	
+	while(any(is.na(coxfitAfterYears$coef)) & Ntries8 <= 40) {
+		NtoKeep = round(length(theEvents)*8)
+		
+			cat("s8")
 			coxfitAfterYears=try(coxph(response ~ geno*env +	strata(Gender,na.group=TRUE) + frailty(CensusDivision), 
 							subset = sort(c(theEvents, sample(theNoEvent, NtoKeep))),
   							data=datamat, control=coxph.control(iter.max=30,toler.chol=.Machine$double.eps)) ) 
 			if(class(coxfitAfterYears)[1]=="try-error")
 				coxfitAfterYears = list(coxfitAfterYears, coef=NA) 
-			Ntries2 = Ntries2 + 1
+			Ntries8 = Ntries8 + 1
 		}
-		Ntires1 = 0
+		Ntries1 = 0
 		# if still singular matrix, keep equal numbers of cases as controls
-		while(any(is.na(coxfitAfterYears$coef)) & Ntries1 <= 10) {
-			
-			NtoKeep = round(length(theEvent)*1)
+
+while(any(is.na(coxfitAfterYears$coef)) & Ntries1 <= 100) {
+	NtoKeep = round(length(theEvents)*1)
+	
 			cat("s1")
 			coxfitAfterYears=try(coxph(response ~ geno*env +	strata(Gender,na.group=TRUE) + frailty(CensusDivision), 
 							subset = sort(c(theEvents, sample(theNoEvent, NtoKeep))),
@@ -210,7 +213,7 @@ for(Dcancer in CommonCancer) {
 		
 		
 		}
-	retries[as.character(Dfollowup), Dcancer,] = c(Ntries, Ntries2, Ntries1)
+	retries[as.character(Dfollowup), Dcancer,] = c(Ntries, Ntries8, Ntries1)
 		
 			# p value is probability of z being above the observed z scores
 			# 1- probability of z being below the observed
