@@ -127,25 +127,26 @@ for(Dcancer in CommonCancer) {
             } else {        
 				
                 # eventType=T if the cancer of interest occurred during the followup period
-                
             	
                 # censored failure time
                 datamat$thisEventTime = datamat$Event
                 datamat$thisEventTime[!hadEvent] = ageEndFollowup[!hadEvent]
 				
+# add left truncation
+    			response = Surv(datamat$Age, datamat$thisEventTime, datamat$thisEventType)
+				
+				theNoEvent = which(!datamat$thisEventType)
+				theEvents = which(datamat$thisEventType)
 				
     # for case-control study
   if ( !is.null(parameters$controlProp)   ) {
-    controlCohort = datamat[datamat$thisEventType==F,]
-    ncase = sum(datamat$thisEventType)
-    controlgroup = controlCohort [sample(dim(controlCohort)[1], round(ncase*parameters$controlProp)),]
-    # add the maximum as the whole cohort
-    datamatFull = datamat                                                   
-    datamat = rbind(datamat[datamat$thisEventType==T,], controlgroup)
+      NtoKeep = round(length(theEvents)*parameters$controlProp)
+	  theSubset = sort(c(theEvents, sample(theNoEvent, NtoKeep)))
+  } else {
+	  theSubset = rep(T, dim(datamat)[1])
   } 
-# and add left truncation
-  response = Surv(datamat$Age, datamat$thisEventTime, datamat$thisEventType)
-	
+ 	
+  
 		if(Dcancer == "Breast") {
 		coxfitAfterYears=try(coxph(response~geno*env + frailty(CensusDivision),
   		data=datamat, subset=datamat$Gender=="F", 
@@ -159,33 +160,43 @@ for(Dcancer in CommonCancer) {
 
 
 		coxfitAfterYears=try(coxph(response~geno*env+
-			strata(Gender,na.group=TRUE) + frailty(CensusDivision), 
+			strata(Gender,na.group=TRUE) + frailty(CensusDivision), subset=theSubset, 
   		data=datamat, control=coxph.control(iter.max=30,toler.chol=.Machine$double.eps)) )
 
 		# check if a parameter not estimated because of singular matrix
 	 # if so, re-run with random 95% of the non-event data until it works
+	if ( !is.null(parameters$controlProp)   ) { # if case control, don't do this
+		Ntries = Inf
+		keepProp = parameters$controlProp # when resampling 2nd stage, resample controls
+		keepProp2 = min(c(parameters$controlProp*0.8, 1)) # in third stage, resample 1:1 case controls, or 0.8*controlProp, whichever is fewer
+	} else {
 		Ntries <- 0
-		if(class(coxfitAfterYears)[1]=="try-error")
-				coxfitAfterYears = list(coxfitAfterYears, coef=NA) 
-			theNoEvent = which(!datamat$thisEventType)
-			theEvents = which(datamat$thisEventType)
-			
+		keepProp = 8  # 2nd stage, resample 8 controls per case
+		keepProp2 = 1  # 3rd stage, 1:1 case control.
+	}
+		if(class(coxfitAfterYears)[1]=="try-error") {
+			coxfitAfterYears = list(coxfitAfterYears, coef=NA) 
+		}
 			while(any(is.na(coxfitAfterYears$coef)) & Ntries <= 10) {
+				
 				NtoKeep = round(length(theNoEvent)*0.95)
 				cat("s")
 			coxfitAfterYears=try(coxph(response ~ geno*env +	strata(Gender,na.group=TRUE) + frailty(CensusDivision), 
 							subset = sort(c(theEvents, sample(theNoEvent, NtoKeep))),
-  							data=datamat, control=coxph.control(iter.max=30,toler.chol=.Machine$double.eps)) ) 
-	if(class(coxfitAfterYears)[1]=="try-error")
+  							data=datamat, control=coxph.control(iter.max=30,toler.chol=.Machine$double.eps)) )
+    	}
+	if(class(coxfitAfterYears)[1]=="try-error") {
 		coxfitAfterYears = list(coxfitAfterYears, coef=NA) 
 			Ntries = Ntries + 1
 		}
 		Ntries8 = 0
 		# if still singular matrix, keep twice the number of cases as controls
 	
+
+
 	while(any(is.na(coxfitAfterYears$coef)) & Ntries8 <= 40) {
-		NtoKeep = round(length(theEvents)*8)
 		
+		NtoKeep = round(length(theEvents)*keepProp)
 			cat("s8")
 			coxfitAfterYears=try(coxph(response ~ geno*env +	strata(Gender,na.group=TRUE) + frailty(CensusDivision), 
 							subset = sort(c(theEvents, sample(theNoEvent, NtoKeep))),
@@ -198,7 +209,7 @@ for(Dcancer in CommonCancer) {
 		# if still singular matrix, keep equal numbers of cases as controls
 
 while(any(is.na(coxfitAfterYears$coef)) & Ntries1 <= 100) {
-	NtoKeep = round(length(theEvents)*1)
+	NtoKeep = round(length(theEvents)*keepProp2)
 	
 			cat("s1")
 			coxfitAfterYears=try(coxph(response ~ geno*env +	strata(Gender,na.group=TRUE) + frailty(CensusDivision), 
@@ -234,10 +245,8 @@ cat("\n warning, null coefficieint, probably too many ties\n")
 pvalue[as.character(Dfollowup),,Dcancer]=0.5
 	}
 	 	
-	 	} #end if there are events
-  if ( !is.null(parameters$controlProp)   ) {
-    datamat=datamatFull
-  }
+	 	} # end if there are events 
+		
 	} # end loop through followup
 	
 	if(verbose) cat("\n")
