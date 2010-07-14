@@ -4,7 +4,7 @@
 # yesnorate means the cancer has been missed
 # noyesrate means a false cancer diagnosis
 Power=function(parameters, populationData,  CommonCancer,  
- 	 SimulationTime, deathFile, cancerRatesByType, verbose=F, saveData=F) {
+ 	 SimulationTime, deathFile, cancerRatesByType, verbose=F, saveData=F, resample=T) {
   # calculate the power, given parameters, rates
 
   # signifncance levels
@@ -35,7 +35,7 @@ CommonCancer=	c(colnames(cancerRatesByType[[1]]) [ !colnames(cancerRatesByType[[
 	# loop through simulations, get all the p values
 	for (i in 1:SimulationTime){
     res =Pvalue(parameters, populationData,  CommonCancer,deathFile, cancerRatesByType, verbose,
-				saveData=saveData)
+				saveData=saveData, resample=resample)
     parray[,,,i] = res
 	carray[,,,i]= attributes(res)$coef
 	varray[,,,i]= attributes(res)$var
@@ -70,7 +70,7 @@ CommonCancer=	c(colnames(cancerRatesByType[[1]]) [ !colnames(cancerRatesByType[[
 # p value function starts from here
 #####################################
 Pvalue = function(parameters, populationData, 
-	CommonCancer, deathFile, cancerRatesByType, verbose=F, saveData=F) { 
+	CommonCancer, deathFile, cancerRatesByType, verbose=F, saveData=F, resample=T) { 
 # if oneEnvPerCommunity=T, each community has only one environment effect.  
 #  otherwise there's one effect per person.									
 
@@ -143,7 +143,7 @@ for(Dcancer in CommonCancer) {
       NtoKeep = round(length(theEvents)*parameters$controlProp)
 	  theSubset = sort(c(theEvents, sample(theNoEvent, NtoKeep)))
   } else {
-	  theSubset = rep(T, dim(datamat)[1])
+	  theSubset = NULL
   } 
  	
   
@@ -155,13 +155,14 @@ for(Dcancer in CommonCancer) {
 		coxfitAfterYears=try(coxph(response~geno*env + frailty(CensusDivision),
   		data=datamat, subset=datamat$Gender=="M", 
 				control=coxph.control(iter.max=30)) ) 		
-		}  else { 
-# add frailty
+		}  else { # not breast or prostate 
 
 
 		coxfitAfterYears=try(coxph(response~geno*env+
 			strata(Gender,na.group=TRUE) + frailty(CensusDivision), subset=theSubset, 
   		data=datamat, control=coxph.control(iter.max=30,toler.chol=.Machine$double.eps)) )
+
+if(resample){  # if we want to do the resampling to get the env effect
 
 		# check if a parameter not estimated because of singular matrix
 	 # if so, re-run with random 95% of the non-event data until it works
@@ -184,11 +185,13 @@ for(Dcancer in CommonCancer) {
 			coxfitAfterYears=try(coxph(response ~ geno*env +	strata(Gender,na.group=TRUE) + frailty(CensusDivision), 
 							subset = sort(c(theEvents, sample(theNoEvent, NtoKeep))),
   							data=datamat, control=coxph.control(iter.max=30,toler.chol=.Machine$double.eps)) )
-    	}
-	if(class(coxfitAfterYears)[1]=="try-error") {
+ 	if(class(coxfitAfterYears)[1]=="try-error") {
 		coxfitAfterYears = list(coxfitAfterYears, coef=NA) 
-			Ntries = Ntries + 1
 		}
+		Ntries = Ntries + 1
+		
+	}
+		
 		Ntries8 = 0
 		# if still singular matrix, keep twice the number of cases as controls
 	
@@ -221,10 +224,12 @@ while(any(is.na(coxfitAfterYears$coef)) & Ntries1 <= 100) {
 		}
 		
 		
+		retries[as.character(Dfollowup), Dcancer,] = c(Ntries, Ntries8, Ntries1)
 		
 		
-		}
-	retries[as.character(Dfollowup), Dcancer,] = c(Ntries, Ntries8, Ntries1)
+		} #end if resample
+		
+		} #end not breast or prostate
 		
 			# p value is probability of z being above the observed z scores
 			# 1- probability of z being below the observed
@@ -329,7 +334,7 @@ return(AllResult)
 
 seqPowerList = function(varying,
 	parameters, CommonCancer, SimulationTime, 
-	populationData,deathFile, cancerRatesByType, verbose=F) {
+	populationData,deathFile, cancerRatesByType, verbose=F, resample=T) {
 # varying is a list, with elements having names being parameters in the model
 # and the elements themselves being vectors of parameter values
 	
@@ -341,7 +346,8 @@ for(Dvarying in names(varying))
 
 
 	
-result= Power(parameters, populationData,  CommonCancer,  SimulationTime, deathFile, cancerRatesByType, verbose)
+result= Power(parameters, populationData,  CommonCancer,  
+		SimulationTime, deathFile, cancerRatesByType, verbose, resample=resample)
 
 
 AllResult = array(NA, c(length(varying[[1]]), dim(result)))
@@ -367,7 +373,7 @@ for (i in seq(from=2, len=length(varying[[1]])-1, by=1) ){
 	for(Dvarying in names(varying))
 		parameters[[Dvarying]] = varying[[Dvarying]][i]
 	
-	result= Power(parameters, populationData, CommonCancer,   SimulationTime, deathFile, cancerRatesByType, verbose)
+	result= Power(parameters, populationData, CommonCancer,   SimulationTime, deathFile, cancerRatesByType, verbose, resample=resample)
 
 	AllResult[i,,,,]=result
 }
