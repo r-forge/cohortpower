@@ -3,17 +3,9 @@
 	<name>cohortSampleSize</name>
 	<comment></comment>
 	<projects>
-		<project>hedy</project>
 	</projects>
 	<buildSpec>
-		<buildCommand>
-			<name>de.walware.statet.r.builders.RSupport</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
 	</buildSpec>
 	<natures>
-		<nature>de.walware.statet.base.StatetNature</nature>
-		<nature>de.walware.statet.r.RNature</nature>
 	</natures>
 </projectDescription>
